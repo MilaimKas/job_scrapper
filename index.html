@@ -187,6 +187,45 @@
     JS toggles it and updates the width of .progress-fill (0% → 100%).      */
     .progress-bar { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin-bottom: 1rem; overflow: hidden; display: none; }
     .progress-fill { height: 100%; background: var(--green); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+
+    /* ── PASSWORD OVERLAY ───────────────────────────────────────────────────
+    Full-screen overlay shown on first visit (or after wrong password).
+    position:fixed pins it over everything regardless of scroll position.
+    z-index:1000 ensures it sits on top of all other elements.               */
+    .pw-overlay { position: fixed; inset: 0; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .pw-overlay.hidden { display: none; }
+    .pw-box { background: var(--bg-primary); border: 0.5px solid var(--border-mid); border-radius: var(--radius-lg); padding: 2rem; width: 100%; max-width: 340px; text-align: center; }
+    .pw-box h2 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .pw-box p  { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.2rem; }
+    .pw-input  { width: 100%; font-size: 14px; padding: 9px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-secondary); color: var(--text-primary); outline: none; margin-bottom: 10px; }
+    .pw-input:focus { border-color: var(--green); }
+    .pw-btn { width: 100%; padding: 9px; border-radius: var(--radius-md); border: none; background: var(--green); color: #fff; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .pw-btn:hover { background: var(--green-dark); }
+    .pw-error { font-size: 12px; color: #A32D2D; margin-top: 8px; display: none; }
+
+    /* ── AI RESULT PANELS ───────────────────────────────────────────────────
+    Shown below the description panel after LLM calls.
+    Each panel is hidden by default and opened by JS.                        */
+    .ai-panel { display: none; margin-top: 10px; padding: 12px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border-light); background: var(--bg-secondary); font-size: 13px; line-height: 1.6; }
+    .ai-panel.open { display: block; }
+
+    /* Score display: large number + color coding based on value */
+    .score-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .score-val { font-size: 28px; font-weight: 700; }
+    .score-val.high   { color: #1D9E75; } /* >= 70 */
+    .score-val.medium { color: #C87D2F; } /* 40-69 */
+    .score-val.low    { color: #A32D2D; } /* < 40  */
+    .score-label { font-size: 12px; color: var(--text-secondary); }
+    .score-reasoning { font-size: 13px; color: var(--text-primary); }
+
+    /* Cover letter panel: monospace-ish feel + copy button */
+    .letter-text { white-space: pre-wrap; font-size: 13px; color: var(--text-primary); line-height: 1.7; }
+    .copy-btn { margin-top: 10px; font-size: 12px; padding: 5px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; }
+    .copy-btn:hover { background: var(--bg-tertiary); }
+
+    /* Shared loading/error states for AI panels */
+    .ai-loading { color: var(--text-secondary); font-style: italic; }
+    .ai-error   { color: #A32D2D; font-style: italic; }
   </style>
 </head>
 <body>
@@ -197,6 +236,21 @@
   to style it.  Think of the DOM (Document Object Model) as a tree of objects —
   similar to a nested dict in Python — that CSS and JS can read and modify.
 -->
+
+<!-- ── PASSWORD OVERLAY ────────────────────────────────────────────────────────
+Shown on first load. Once the correct password is entered it is stored in
+localStorage and the overlay is hidden for all future visits.
+The overlay is also re-shown if the server returns 401 (wrong/changed secret). -->
+<div class="pw-overlay" id="pwOverlay">
+  <div class="pw-box">
+    <h2>Jobsuche — Erneuerbare Energien</h2>
+    <p>Bitte Zugangscode eingeben</p>
+    <!-- keydown listener on the input lets the user press Enter to submit -->
+    <input class="pw-input" id="pwInput" type="password" placeholder="Zugangscode…" onkeydown="if(event.key==='Enter') submitPassword()" />
+    <button class="pw-btn" onclick="submitPassword()">Weiter</button>
+    <div class="pw-error" id="pwError">Falscher Code. Bitte erneut versuchen.</div>
+  </div>
+</div>
 
 <div class="app">
 
@@ -491,6 +545,9 @@ function jobCardHTML(j) {
       <button class="action-btn" id="desc-btn-${id}" onclick="toggleDescription('${id}')">
         ▾ Beschreibung
       </button>
+      <!-- AI buttons — only useful once the description is loaded, but available immediately -->
+      <button class="action-btn" id="match-btn-${id}" onclick="runMatch('${id}')">Passt es zu mir?</button>
+      <button class="action-btn" id="letter-btn-${id}" onclick="runCoverLetter('${id}')">Motivationsschreiben</button>
       ${saved ? `<select class="status-select" onchange="setStatus('${id}', this.value)">
         <option value="" ${!status?'selected':''}>Status…</option>
         <option value="beworben"  ${status==='beworben' ?'selected':''}>Beworben</option>
@@ -501,6 +558,9 @@ function jobCardHTML(j) {
     </div>
     <!-- Description panel — empty on first render, filled lazily on first toggle -->
     <div class="job-description" id="desc-${id}"></div>
+    <!-- AI panels — hidden until the user clicks the respective button -->
+    <div class="ai-panel" id="match-panel-${id}"></div>
+    <div class="ai-panel" id="letter-panel-${id}"></div>
   </div>`;
 }
 
@@ -635,10 +695,187 @@ function updateStats() {
     .filter(s => ['beworben','interview','angebot'].includes(s)).length;
 }
 
+// ── PASSWORD GATE ─────────────────────────────────────────────────────────────
+// The secret is stored in localStorage after first successful entry.
+// All LLM fetch calls read it via appSecret() and send it as a header.
+
+function appSecret() {
+  return localStorage.getItem('app_secret') || '';
+}
+
+function submitPassword() {
+  const val = document.getElementById('pwInput').value.trim();
+  if (!val) return;
+  // Store the candidate password and hide the overlay optimistically.
+  // If the first LLM call returns 401, we'll re-show it and clear storage.
+  localStorage.setItem('app_secret', val);
+  document.getElementById('pwOverlay').classList.add('hidden');
+  document.getElementById('pwError').style.display = 'none';
+}
+
+// Called whenever an LLM API returns 401 — wrong or changed password.
+function handleUnauthorized() {
+  localStorage.removeItem('app_secret');
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwError').style.display = 'block';
+  document.getElementById('pwOverlay').classList.remove('hidden');
+}
+
+// ── HELPER: ensure description is loaded before LLM calls ────────────────────
+// Both runMatch and runCoverLetter need the description text.
+// If it's not in the cache yet, fetch it first (same logic as toggleDescription).
+async function ensureDescription(id) {
+  if (descriptionCache[id]) return descriptionCache[id];
+  const r = await fetch(`/api/detail?refnr=${encodeURIComponent(id)}`);
+  if (!r.ok) throw new Error(`Detail fetch failed: HTTP ${r.status}`);
+  const data = await r.json();
+  const html = data.stellenangebotsBeschreibung || '';
+  descriptionCache[id] = html;
+  return html;
+}
+
+// Strip HTML tags from a string to get plain text for the LLM prompt.
+// The browser's DOM parser is the cleanest way to do this in JS.
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+// ── runMatch(id) ──────────────────────────────────────────────────────────────
+// Calls /api/match and renders a score + reasoning in the match panel.
+async function runMatch(id) {
+  const panel = document.getElementById(`match-panel-${id}`);
+  const btn   = document.getElementById(`match-btn-${id}`);
+
+  // Toggle off if already open
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    btn.textContent = 'Passt es zu mir?';
+    return;
+  }
+
+  panel.classList.add('open');
+  panel.innerHTML = '<span class="ai-loading">Analysiere…</span>';
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const descHtml = await ensureDescription(id);
+    const job = allJobs.find(j => j.refnr === id) || {};
+
+    const r = await fetch('/api/match', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-app-secret': appSecret(),   // send the stored password with every LLM request
+      },
+      body: JSON.stringify({
+        title:       job.titel      || '',
+        company:     job.arbeitgeber || '',
+        description: stripHtml(descHtml),  // plain text — no HTML tags in the prompt
+      }),
+    });
+
+    if (r.status === 401) { handleUnauthorized(); return; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const { score, reasoning } = await r.json();
+
+    // Colour-code the score: green ≥ 70, amber 40-69, red < 40
+    const cls = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+    panel.innerHTML = `
+      <div class="score-row">
+        <span class="score-val ${cls}">${score}</span>
+        <span class="score-label">/ 100<br>Übereinstimmung</span>
+      </div>
+      <div class="score-reasoning">${reasoning}</div>`;
+    btn.textContent = '▴ Passt es zu mir?';
+
+  } catch (err) {
+    panel.innerHTML = `<span class="ai-error">Fehler: ${err.message}</span>`;
+    btn.textContent = 'Passt es zu mir?';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── runCoverLetter(id) ────────────────────────────────────────────────────────
+// Calls /api/coverletter and renders a copyable letter draft.
+async function runCoverLetter(id) {
+  const panel = document.getElementById(`letter-panel-${id}`);
+  const btn   = document.getElementById(`letter-btn-${id}`);
+
+  // Toggle off if already open
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    btn.textContent = 'Motivationsschreiben';
+    return;
+  }
+
+  panel.classList.add('open');
+  panel.innerHTML = '<span class="ai-loading">Schreibe Motivationsschreiben…</span>';
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const descHtml = await ensureDescription(id);
+    const job = allJobs.find(j => j.refnr === id) || {};
+
+    const r = await fetch('/api/coverletter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-app-secret': appSecret(),
+      },
+      body: JSON.stringify({
+        title:       job.titel       || '',
+        company:     job.arbeitgeber || '',
+        description: stripHtml(descHtml),
+      }),
+    });
+
+    if (r.status === 401) { handleUnauthorized(); return; }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const { letter } = await r.json();
+
+    panel.innerHTML = `
+      <div class="letter-text">${letter}</div>
+      <button class="copy-btn" onclick="copyLetter('${id}')">Kopieren</button>`;
+    btn.textContent = '▴ Motivationsschreiben';
+
+  } catch (err) {
+    panel.innerHTML = `<span class="ai-error">Fehler: ${err.message}</span>`;
+    btn.textContent = 'Motivationsschreiben';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── copyLetter(id) ────────────────────────────────────────────────────────────
+// Copies the cover letter text to the clipboard.
+// navigator.clipboard is the modern browser API for clipboard access.
+function copyLetter(id) {
+  const text = document.querySelector(`#letter-panel-${id} .letter-text`)?.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(`#letter-panel-${id} .copy-btn`);
+    btn.textContent = 'Kopiert ✓';
+    setTimeout(() => { btn.textContent = 'Kopieren'; }, 2000);
+  });
+}
+
 // ── INITIALISATION ────────────────────────────────────────────────────────────
 // This runs immediately when the page loads (equivalent to `if __name__ == "__main__"`).
 // Only stats are updated; jobs are loaded lazily when the user clicks Aktualisieren.
 updateStats();
+
+// Show password overlay if no secret is stored yet; hide it if one exists.
+if (!appSecret()) {
+  document.getElementById('pwOverlay').classList.remove('hidden');
+} else {
+  document.getElementById('pwOverlay').classList.add('hidden');
+}
 </script>
 </body>
 </html>

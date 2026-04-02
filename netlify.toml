@@ -10,3 +10,13 @@
   from = "/api/detail"
   to = "/.netlify/functions/detail"
   status = 200
+
+[[redirects]]
+  from = "/api/match"
+  to = "/.netlify/functions/match"
+  status = 200
+
+[[redirects]]
+  from = "/api/coverletter"
+  to = "/.netlify/functions/coverletter"
+  status = 200
