@@ -5,3 +5,8 @@
   from = "/api/jobs"
   to = "/.netlify/functions/jobs"
   status = 200
+
+[[redirects]]
+  from = "/api/detail"
+  to = "/.netlify/functions/detail"
+  status = 200

@@ -1,11 +1,32 @@
 <!DOCTYPE html>
+<!-- Tells the browser: "this is an HTML5 document" -->
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
+  <!-- Makes the page scale correctly on mobile screens -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Jobsuche — Erneuerbare Energien</title>
+
   <style>
+    /*
+    ── CSS BASICS ──────────────────────────────────────────────────────────────
+    CSS is a set of rules that tell the browser how to style HTML elements.
+    Each rule looks like:
+        selector { property: value; }
+    The selector picks which elements to style (like a pandas .loc mask),
+    and the declarations inside set visual properties.
+    ────────────────────────────────────────────────────────────────────────── */
+
+    /* Apply box-sizing to every element so padding doesn't affect width math,
+       and reset default browser margins/padding to zero (browsers add some by default). */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /*
+    CSS custom properties (variables) — like Python constants at the top of a script.
+    Defined inside :root (the <html> element) so they're globally accessible.
+    Referenced later with var(--name).
+    This section defines the light-mode color palette.
+    */
     :root {
       --bg-primary: #ffffff; --bg-secondary: #f4f4f2; --bg-tertiary: #eceae3;
       --text-primary: #1a1a18; --text-secondary: #6b6b67;
@@ -13,6 +34,13 @@
       --green: #1D9E75; --green-light: #E1F5EE; --green-dark: #0F6E56;
       --radius-md: 8px; --radius-lg: 12px;
     }
+
+    /*
+    @media is a conditional block — like an `if` statement for the browser.
+    This overrides the color variables when the user's OS is in dark mode.
+    Only the values change; all the rules that reference var(--bg-primary) etc.
+    automatically pick up the new values.
+    */
     @media (prefers-color-scheme: dark) {
       :root {
         --bg-primary: #1e1e1c; --bg-secondary: #2a2a28; --bg-tertiary: #333331;
@@ -21,79 +49,174 @@
         --green-light: #0a3d2b; --green-dark: #5DCAA5;
       }
     }
+
+    /* ── LAYOUT ──────────────────────────────────────────────────────────────
+    The <body> is the root visible element.
+    min-height: 100vh means "at least the full viewport height".
+    padding adds breathing room so content doesn't touch screen edges.       */
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg-tertiary); color: var(--text-primary); min-height: 100vh; padding: 2rem 1rem; }
+
+    /* .app is the main container div — max-width + auto margins center it horizontally */
     .app { max-width: 860px; margin: 0 auto; }
+
+    /* ── HEADER ────────────────────────────────────────────────────────────── */
     .header { margin-bottom: 1.5rem; }
     .header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; }
     .header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* ── ERROR BAR ─────────────────────────────────────────────────────────
+    Hidden by default (display:none). Shown via JavaScript when the API fails. */
     .error-bar { background: #FCEBEB; border: 0.5px solid #F09595; border-radius: var(--radius-md); padding: 12px 16px; font-size: 13px; color: #791F1F; margin-bottom: 1rem; display: none; }
+
+    /* ── FILTER CONTROLS ───────────────────────────────────────────────────
+    display:flex + flex-wrap:wrap = items sit side by side and wrap to new
+    lines on small screens (like np.reshape but automatic).                  */
     .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; align-items: center; }
+
+    /* Pill-shaped filter buttons (all / wind / solar / remote / Hamburg).
+    border-radius: 20px makes them fully rounded.                            */
     .filter-btn { font-size: 12px; padding: 5px 14px; border-radius: 20px; border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+    /* Active state: green fill when selected */
     .filter-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+    /* Hover state: slight background change when mouse hovers (but not if already active) */
     .filter-btn:hover:not(.active) { background: var(--bg-secondary); }
+
+    /* The "Aktualisieren" (Refresh) button — sits at the right end via margin-left:auto */
     .refresh-btn { margin-left: auto; font-size: 13px; padding: 7px 18px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; }
     .refresh-btn:hover { background: var(--bg-secondary); }
-    .refresh-btn:active { transform: scale(0.97); }
+    .refresh-btn:active { transform: scale(0.97); } /* Slight shrink on click for tactile feel */
+
+    /* The spinning ⟳ icon during loading — CSS keyframe animation (like a loop) */
     .refresh-btn.loading .spin { display: inline-block; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SEARCH BOX ────────────────────────────────────────────────────────── */
     .search-input { width: 100%; font-size: 13px; padding: 8px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-primary); margin-bottom: 12px; outline: none; }
+    /* Highlight border green when the input has keyboard focus */
     .search-input:focus { border-color: var(--green); }
+
+    /* ── STATS ROW ─────────────────────────────────────────────────────────
+    CSS Grid: 4 equal columns.  Think of it like a 1×4 DataFrame display.   */
     .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
     .stat { background: var(--bg-primary); border-radius: var(--radius-md); padding: 12px 14px; border: 0.5px solid var(--border-light); }
     .stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
     .stat-val { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+
+    /* ── TABS ───────────────────────────────────────────────────────────────
+    The three tabs: Stellenangebote / Gemerkte Jobs / Bewerbungen.
+    Active tab has a green underline; tab switching is handled in JS.        */
     .tabs { display: flex; gap: 2px; margin-bottom: 1rem; border-bottom: 0.5px solid var(--border-light); }
     .tab { font-size: 13px; padding: 7px 16px; border: none; background: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
     .tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 500; }
+
+    /* ── JOB CARDS (list view) ─────────────────────────────────────────────
+    Each job posting is rendered as a card in a vertical flex column.        */
     .jobs-list { display: flex; flex-direction: column; gap: 10px; }
     .job-card { background: var(--bg-primary); border: 0.5px solid var(--border-light); border-radius: var(--radius-lg); padding: 14px 16px; transition: border-color 0.15s; }
     .job-card:hover { border-color: var(--border-mid); }
+    /* Jobs posted today get a green left border accent */
     .job-card.new-today { border-left: 3px solid var(--green); }
+
+    /* Inside each card: title row is flex so the source tag can sit on the right */
     .job-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
     .job-title { font-size: 14px; font-weight: 500; color: var(--text-primary); line-height: 1.4; }
     .job-title a { color: inherit; text-decoration: none; }
     .job-title a:hover { color: var(--green); }
     .job-company { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
     .source-tag { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+
+    /* ── BADGES (small colored labels on each card) ────────────────────────
+    Each badge is a <span> with one of these classes applied.                */
     .job-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
     .badge-location { background: var(--bg-secondary); color: var(--text-secondary); }
-    .badge-wind { background: #E1F5EE; color: #0F6E56; }
+    .badge-wind  { background: #E1F5EE; color: #0F6E56; }
     .badge-solar { background: #FAEEDA; color: #854F0B; }
     .badge-remote { background: #EEEDFE; color: #534AB7; }
-    .badge-new { background: #EAF3DE; color: #3B6D11; font-weight: 600; }
-    .badge-date { background: var(--bg-secondary); color: var(--text-secondary); }
+    .badge-new   { background: #EAF3DE; color: #3B6D11; font-weight: 600; }
+    .badge-date  { background: var(--bg-secondary); color: var(--text-secondary); }
+
+    /* Badge color overrides for dark mode */
     @media (prefers-color-scheme: dark) {
-      .badge-wind { background: #083d2b; color: #5DCAA5; }
-      .badge-solar { background: #3d2a08; color: #EF9F27; }
+      .badge-wind   { background: #083d2b; color: #5DCAA5; }
+      .badge-solar  { background: #3d2a08; color: #EF9F27; }
       .badge-remote { background: #1e1a40; color: #AFA9EC; }
-      .badge-new { background: #0f2a08; color: #97C459; }
+      .badge-new    { background: #0f2a08; color: #97C459; }
     }
+
+    /* ── CARD ACTIONS (save / apply buttons at the bottom of each card) ──── */
     .job-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border-light); align-items: center; flex-wrap: wrap; }
     .action-btn { font-size: 12px; padding: 5px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; }
     .action-btn:hover { background: var(--bg-secondary); }
     .action-btn.saved { color: var(--green); border-color: var(--green); }
+
+    /* Status dropdown (<select>) that appears once a job is saved */
     .status-select { font-size: 12px; padding: 5px 8px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; margin-left: auto; }
+
+    /* ── EMPTY STATE placeholder shown when no jobs match the filter ──────── */
     .empty { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 14px; background: var(--bg-primary); border-radius: var(--radius-lg); border: 0.5px solid var(--border-light); }
+
+    /* ── JOB DESCRIPTION (expandable section below card actions) ───────────
+    Hidden by default; toggled via JS. The inner content is scrollable so
+    very long descriptions don't blow out the page layout.                   */
+    .job-description { display: none; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border-light); font-size: 13px; color: var(--text-primary); line-height: 1.6; max-height: 300px; overflow-y: auto; }
+    .job-description.open { display: block; }
+    /* Strip aggressive styling from the BA API's HTML (bold, colours, etc.) */
+    .job-description * { font-size: inherit !important; color: inherit !important; background: none !important; font-family: inherit !important; }
+    .job-description ul, .job-description ol { padding-left: 1.2em; }
+    /* Loading / error states inside the description panel */
+    .desc-loading { color: var(--text-secondary); font-style: italic; }
+    .desc-error   { color: #A32D2D; font-style: italic; }
+
+    /* ── KANBAN BOARD (application tracking view) ──────────────────────────
+    4-column grid: Beworben / Interview / Angebot / Abgelehnt.               */
     .kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+
+    /* ── RESPONSIVE BREAKPOINTS ─────────────────────────────────────────────
+    On screens narrower than 600px (phones), collapse to 2-column layouts.   */
     @media (max-width: 600px) { .kanban { grid-template-columns: repeat(2, 1fr); } .stats-row { grid-template-columns: repeat(2, 1fr); } .refresh-btn { margin-left: 0; width: 100%; justify-content: center; } }
+
     .kanban-col { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 10px; }
     .kanban-col-title { font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
     .kanban-card { background: var(--bg-primary); border: 0.5px solid var(--border-light); border-radius: var(--radius-md); padding: 10px; margin-bottom: 8px; }
     .kanban-card-title { font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
     .kanban-card-co { font-size: 11px; color: var(--text-secondary); }
+
+    /* ── PROGRESS BAR ───────────────────────────────────────────────────────
+    Shown during the multi-query fetch. Hidden (display:none) by default;
+    JS toggles it and updates the width of .progress-fill (0% → 100%).      */
     .progress-bar { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin-bottom: 1rem; overflow: hidden; display: none; }
     .progress-fill { height: 100%; background: var(--green); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
   </style>
 </head>
 <body>
+
+<!--
+  HTML STRUCTURE
+  The page is made of nested <div> elements, each with a class that CSS uses
+  to style it.  Think of the DOM (Document Object Model) as a tree of objects —
+  similar to a nested dict in Python — that CSS and JS can read and modify.
+-->
+
 <div class="app">
+
+  <!-- ── PAGE HEADER ──────────────────────────────────────────────────────── -->
   <div class="header">
     <h1>Jobsuche — Erneuerbare Energien</h1>
     <p>Projektmanagement · Wind &amp; Solar · Deutschland</p>
+    <!-- &amp; is an HTML "entity": the safe way to write the & character -->
   </div>
+
+  <!-- Error banner — hidden by default; JS makes it visible on API failure -->
   <div id="error-bar" class="error-bar"></div>
+
+  <!-- Progress bar shown while fetching (JS controls width of the inner div) -->
   <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- ── FILTER BUTTONS + REFRESH ─────────────────────────────────────────
+  onclick="..." calls a JavaScript function directly when the button is clicked.
+  The second argument `this` passes a reference to the button element itself,
+  so JS can toggle the "active" class on it.                                  -->
   <div class="controls">
     <button class="filter-btn active" onclick="setFilter('all', this)">Alle</button>
     <button class="filter-btn" onclick="setFilter('wind', this)">Wind</button>
@@ -104,234 +227,418 @@
       <span class="spin">⟳</span> Aktualisieren
     </button>
   </div>
+
+  <!-- Free-text search box — oninput fires on every keystroke, re-rendering the list -->
   <input class="search-input" id="searchInput" placeholder="Stichwortsuche (z.B. Windpark, Bauleitung, Offshore...)" oninput="renderJobs()" />
+
+  <!-- ── STATS ROW ──────────────────────────────────────────────────────────
+  The span ids are used by JS to inject numbers (e.g. statTotal.textContent = 42) -->
   <div class="stats-row">
     <div class="stat"><div class="stat-label">Gefunden</div><div class="stat-val" id="statTotal">—</div></div>
     <div class="stat"><div class="stat-label">Neu heute</div><div class="stat-val" id="statNew">—</div></div>
     <div class="stat"><div class="stat-label">Gemerkt</div><div class="stat-val" id="statSaved">—</div></div>
     <div class="stat"><div class="stat-label">Beworben</div><div class="stat-val" id="statApplied">—</div></div>
   </div>
+
+  <!-- ── TABS ────────────────────────────────────────────────────────────────
+  Three content panels exist in the HTML simultaneously; only one is visible
+  at a time (controlled by display:none / display:block set in JS).           -->
   <div class="tabs">
     <button class="tab active" onclick="switchTab('jobs', this)">Stellenangebote</button>
     <button class="tab" onclick="switchTab('saved', this)">Gemerkte Jobs</button>
     <button class="tab" onclick="switchTab('kanban', this)">Bewerbungen</button>
   </div>
+
+  <!-- Tab panels — JS hides/shows these by setting their style.display -->
   <div id="tab-jobs"><div class="jobs-list" id="jobsList"><div class="empty">Klicke auf "Aktualisieren" um aktuelle Stellen zu laden.</div></div></div>
   <div id="tab-saved" style="display:none;"><div class="jobs-list" id="savedList"></div></div>
   <div id="tab-kanban" style="display:none;"><div class="kanban" id="kanbanBoard"></div></div>
-</div>
+
+</div><!-- end .app -->
+
 <script>
-  let allJobs = [], activeFilter = 'all', currentTab = 'jobs';
-  let savedJobs = {}, jobStatuses = {};
-  try { savedJobs = JSON.parse(localStorage.getItem('ej_saved') || '{}'); } catch(e) {}
-  try { jobStatuses = JSON.parse(localStorage.getItem('ej_status') || '{}'); } catch(e) {}
+/*
+── JAVASCRIPT BASICS ──────────────────────────────────────────────────────────
+JS runs in the browser and can read/modify the DOM (the HTML element tree).
+Syntax is similar to Python but with curly braces for blocks and semicolons.
+`let` / `const` declare variables (like Python's regular assignment).
+Functions are declared with `function name(){}` or arrow syntax `() => {}`.
+──────────────────────────────────────────────────────────────────────────── */
 
-  const KW_WIND   = ['wind','offshore','onshore','windpark','windkraft','windenergie','windturbine','rotor'];
-  const KW_SOLAR  = ['solar','photovoltaik','pv','solarpark','solarkraft','solaranlage'];
-  const KW_REMOTE = ['remote','homeoffice','home office','mobiles arbeiten','ortsunabhängig','bundesweit'];
-  const KW_HH     = ['hamburg','schleswig','mecklenburg','niedersachsen','lübeck','kiel','rostock','bremen','schwerin','flensburg'];
+// ── GLOBAL STATE ─────────────────────────────────────────────────────────────
+// Think of these as module-level variables in Python.
+let allJobs = [];          // Array (like a Python list) of all fetched job objects
+let activeFilter = 'all';  // Which filter button is currently active
+let currentTab = 'jobs';   // Which tab panel is visible
 
-  const QUERIES = [
-    { was: 'Projektmanager Windenergie',        wo: 'Hamburg', umkreis: 200 },
-    { was: 'Projektmanager Erneuerbare Energien', wo: 'Hamburg', umkreis: 200 },
-    { was: 'Projektleiter Windkraft',            wo: 'Deutschland' },
-    { was: 'Projektleiter Photovoltaik',         wo: 'Deutschland' },
-    { was: 'Projektmanager Solar',               wo: 'Deutschland' },
-    { was: 'Projektleiter Erneuerbare Energien', wo: 'Deutschland' },
-    { was: 'Projektmanager Offshore Wind',       wo: 'Deutschland' },
-    { was: 'Bauleiter Windpark',                 wo: 'Deutschland' },
-  ];
+// Cache for fetched descriptions: { refnr: htmlString }
+// Avoids re-fetching when the user toggles the panel closed then open again.
+// Like a Python dict used as a memoization store.
+const descriptionCache = {};
 
-  function tagJob(j) {
-    const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort, j.arbeitsort?.region, j.arbeitsort?.bundesland].join(' ').toLowerCase();
-    j._wind   = KW_WIND.some(k => txt.includes(k));
-    j._solar  = KW_SOLAR.some(k => txt.includes(k));
-    j._remote = KW_REMOTE.some(k => txt.includes(k));
-    j._hh     = KW_HH.some(k => txt.includes(k));
-    const pub = j.aktuelleVeroeffentlichungsdatum || j.eintrittsdatum || '';
-    const d = new Date(pub); const today = new Date(); today.setHours(0,0,0,0);
-    j._new  = !isNaN(d.getTime()) && d >= today;
-    j._date = pub ? new Date(pub).toLocaleDateString('de-DE') : '';
-    return j;
+// Dicts (JS objects/maps) storing user interactions, persisted in localStorage
+// (localStorage is a key-value store built into the browser — survives page reload)
+let savedJobs = {}, jobStatuses = {};
+// try/catch: localStorage can fail (e.g. private browsing), so we handle that gracefully
+try { savedJobs    = JSON.parse(localStorage.getItem('ej_saved')  || '{}'); } catch(e) {}
+try { jobStatuses  = JSON.parse(localStorage.getItem('ej_status') || '{}'); } catch(e) {}
+
+// ── KEYWORD LISTS for auto-tagging jobs ──────────────────────────────────────
+// If any of these strings appear in a job's text fields, it gets that tag.
+const KW_WIND   = ['wind','offshore','onshore','windpark','windkraft','windenergie','windturbine','rotor'];
+const KW_SOLAR  = ['solar','photovoltaik','pv','solarpark','solarkraft','solaranlage'];
+const KW_REMOTE = ['remote','homeoffice','home office','mobiles arbeiten','ortsunabhängig','bundesweit'];
+const KW_HH     = ['hamburg','schleswig','mecklenburg','niedersachsen','lübeck','kiel','rostock','bremen','schwerin','flensburg'];
+
+// ── SEARCH QUERIES sent to the BA API ────────────────────────────────────────
+// Each object is like a Python dict: { was, wo, umkreis }.
+// `was` = job title keyword, `wo` = location, `umkreis` = radius in km.
+const QUERIES = [
+  { was: 'Projektmanager Windenergie',         wo: 'Hamburg', umkreis: 200 },
+  { was: 'Projektmanager Erneuerbare Energien', wo: 'Hamburg', umkreis: 200 },
+  { was: 'Projektleiter Windkraft',             wo: 'Deutschland' },
+  { was: 'Projektleiter Photovoltaik',          wo: 'Deutschland' },
+  { was: 'Projektmanager Solar',                wo: 'Deutschland' },
+  { was: 'Projektleiter Erneuerbare Energien',  wo: 'Deutschland' },
+  { was: 'Projektmanager Offshore Wind',        wo: 'Deutschland' },
+  { was: 'Bauleiter Windpark',                  wo: 'Deutschland' },
+];
+
+// ── tagJob(j) ─────────────────────────────────────────────────────────────────
+// Enriches a raw job object from the API with boolean flags and a formatted date.
+// Think of this as a feature-engineering step on a single row.
+function tagJob(j) {
+  // Concatenate all text fields into one lowercase string for keyword matching
+  const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort, j.arbeitsort?.region, j.arbeitsort?.bundesland]
+    .join(' ').toLowerCase();
+  // ?.  is optional chaining — like Python's getattr(obj, 'attr', None): safe if nested key is missing
+
+  // Set boolean tag properties directly on the object (like adding columns to a row)
+  j._wind   = KW_WIND.some(k => txt.includes(k));   // .some() = any() in Python
+  j._solar  = KW_SOLAR.some(k => txt.includes(k));
+  j._remote = KW_REMOTE.some(k => txt.includes(k));
+  j._hh     = KW_HH.some(k => txt.includes(k));
+
+  // Parse publication date and flag jobs posted today
+  const pub = j.aktuelleVeroeffentlichungsdatum || j.eintrittsdatum || '';
+  const d = new Date(pub);
+  const today = new Date(); today.setHours(0,0,0,0); // midnight = start of today
+  j._new  = !isNaN(d.getTime()) && d >= today;       // isNaN check = guard against invalid dates
+
+  // Format date as DD.MM.YYYY (German locale) for display
+  j._date = pub ? new Date(pub).toLocaleDateString('de-DE') : '';
+  return j;
+}
+
+// ── fetchJobs() ───────────────────────────────────────────────────────────────
+// Runs all QUERIES sequentially, deduplicates results by refnr, then renders.
+// `async` / `await` is JS's equivalent of Python's asyncio: pause execution
+// until the network request completes, without blocking the browser UI thread.
+async function fetchJobs() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');  // triggers the spinning animation via CSS
+  showError(null);
+  setProgress(0, true);
+
+  // Map is like Python's dict but preserves insertion order and has .has()/.set()/.get()
+  // Used here to deduplicate jobs across queries — refnr is the unique job ID.
+  const results = new Map();
+  let fetchedAny = false;
+
+  // Sequential loop — one API call per query, updating the progress bar after each
+  for (let i = 0; i < QUERIES.length; i++) {
+    const q = QUERIES[i];
+
+    // URLSearchParams builds a query string like ?was=...&size=25&angebotsart=1
+    const params = new URLSearchParams({ was: q.was, size: 25, angebotsart: 1 });
+    if (q.wo)     params.set('wo', q.wo);
+    if (q.umkreis) params.set('umkreis', q.umkreis);
+
+    try {
+      // Call our Netlify proxy at /api/jobs (which forwards to the BA API)
+      // `await` pauses here until the HTTP response arrives
+      const r = await fetch(`/api/jobs?${params}`);
+      if (r.ok) {
+        const data = await r.json();
+        fetchedAny = true;
+        // Add each job to the Map, keyed by refnr — duplicates are silently overwritten
+        (data.stellenangebote || []).forEach(j => {
+          if (!results.has(j.refnr)) results.set(j.refnr, j);
+        });
+      }
+    } catch(e) {} // Silently skip if a single query fails (network error, timeout, etc.)
+
+    // Update progress bar: i goes 0→7, so (i+1)/8 gives 12.5% steps
+    setProgress(Math.round(((i + 1) / QUERIES.length) * 100));
   }
 
-  async function fetchJobs() {
-    const btn = document.getElementById('refreshBtn');
-    btn.classList.add('loading');
-    showError(null);
-    setProgress(0, true);
-    const results = new Map();
-    let fetchedAny = false;
+  setProgress(100);
+  setTimeout(() => setProgress(0, false), 600); // Hide bar after 600ms
 
-    for (let i = 0; i < QUERIES.length; i++) {
-      const q = QUERIES[i];
-      const params = new URLSearchParams({ was: q.was, size: 25, angebotsart: 1 });
-      if (q.wo) params.set('wo', q.wo);
-      if (q.umkreis) params.set('umkreis', q.umkreis);
-      try {
-        // Call our Netlify proxy instead of the BA API directly
-        const r = await fetch(`/api/jobs?${params}`);
-        if (r.ok) {
-          const data = await r.json();
-          fetchedAny = true;
-          (data.stellenangebote || []).forEach(j => { if (!results.has(j.refnr)) results.set(j.refnr, j); });
-        }
-      } catch(e) {}
-      setProgress(Math.round(((i + 1) / QUERIES.length) * 100));
-    }
-
-    setProgress(100);
-    setTimeout(() => setProgress(0, false), 600);
-
-    if (!fetchedAny) {
-      showError('Die API ist nicht erreichbar. Bitte prüfe deine Internetverbindung.');
-      btn.classList.remove('loading');
-      return;
-    }
-
-    allJobs = [...results.values()].map(tagJob).sort((a, b) => (b._new ? 1 : 0) - (a._new ? 1 : 0));
-    updateStats();
-    renderJobs();
+  if (!fetchedAny) {
+    showError('Die API ist nicht erreichbar. Bitte prüfe deine Internetverbindung.');
     btn.classList.remove('loading');
+    return;
   }
 
-  function setProgress(pct, show) {
-    const bar = document.getElementById('progressBar');
-    if (show !== undefined) bar.style.display = show ? 'block' : 'none';
-    document.getElementById('progressFill').style.width = pct + '%';
-  }
-
-  function showError(msg) {
-    const el = document.getElementById('error-bar');
-    el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
-  }
-
-  function setFilter(f, btn) {
-    activeFilter = f;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active'); renderJobs();
-  }
-
-  function switchTab(tab, btn) {
-    currentTab = tab;
-    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    ['jobs','saved','kanban'].forEach(t => { document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none'; });
-    if (tab === 'saved') renderSaved();
-    if (tab === 'kanban') renderKanban();
-  }
-
-  function filteredJobs() {
-    const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
-    return allJobs.filter(j => {
-      const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort].join(' ').toLowerCase();
-      if (q && !txt.includes(q)) return false;
-      if (activeFilter === 'wind')    return j._wind;
-      if (activeFilter === 'solar')   return j._solar;
-      if (activeFilter === 'remote')  return j._remote;
-      if (activeFilter === 'hamburg') return j._hh;
-      return true;
-    });
-  }
-
-  function jobCardHTML(j) {
-    const id = j.refnr;
-    const saved = !!savedJobs[id];
-    const status = jobStatuses[id] || '';
-    const loc = j.arbeitsort?.ort || j.arbeitsort?.region || 'Deutschland';
-    const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${id}`;
-    const tags = [];
-    if (j._new)    tags.push('<span class="badge badge-new">Neu</span>');
-    if (j._wind)   tags.push('<span class="badge badge-wind">Wind</span>');
-    if (j._solar)  tags.push('<span class="badge badge-solar">Solar</span>');
-    if (j._remote) tags.push('<span class="badge badge-remote">Remote</span>');
-    if (j._date)   tags.push(`<span class="badge badge-date">${j._date}</span>`);
-    return `<div class="job-card ${j._new ? 'new-today' : ''}">
-      <div class="job-top">
-        <div style="flex:1;min-width:0;">
-          <div class="job-title"><a href="${url}" target="_blank">${j.titel}</a></div>
-          <div class="job-company">${j.arbeitgeber || 'Unbekannt'}</div>
-        </div>
-        <span class="source-tag">BA</span>
-      </div>
-      <div class="job-meta">
-        <span class="badge badge-location">📍 ${loc}</span>${tags.join('')}
-      </div>
-      <div class="job-actions">
-        <button class="action-btn ${saved ? 'saved' : ''}" onclick="toggleSave('${id}')">
-          ${saved ? '★ Gemerkt' : '☆ Merken'}
-        </button>
-        <a class="action-btn" href="${url}" target="_blank">Zur Stelle →</a>
-        ${saved ? `<select class="status-select" onchange="setStatus('${id}', this.value)">
-          <option value="" ${!status?'selected':''}>Status…</option>
-          <option value="beworben"  ${status==='beworben' ?'selected':''}>Beworben</option>
-          <option value="interview" ${status==='interview'?'selected':''}>Interview</option>
-          <option value="angebot"   ${status==='angebot'  ?'selected':''}>Angebot</option>
-          <option value="abgelehnt" ${status==='abgelehnt'?'selected':''}>Abgelehnt</option>
-        </select>` : ''}
-      </div>
-    </div>`;
-  }
-
-  function renderJobs() {
-    const jobs = filteredJobs(); updateStats();
-    document.getElementById('jobsList').innerHTML = jobs.length
-      ? jobs.map(jobCardHTML).join('')
-      : '<div class="empty">Keine Stellen gefunden. Filter anpassen oder neu laden.</div>';
-  }
-
-  function renderSaved() {
-    const ids = Object.keys(savedJobs);
-    const list = document.getElementById('savedList');
-    if (!ids.length) { list.innerHTML = '<div class="empty">Noch keine Jobs gemerkt.</div>'; return; }
-    const jobs = ids.map(id => allJobs.find(j => j.refnr === id) || { refnr: id, ...savedJobs[id] });
-    list.innerHTML = jobs.map(jobCardHTML).join('');
-  }
-
-  function renderKanban() {
-    const cols = { beworben:[], interview:[], angebot:[], abgelehnt:[] };
-    const labels = { beworben:'Beworben', interview:'Interview', angebot:'Angebot', abgelehnt:'Abgelehnt' };
-    const colors = { beworben:'#185FA5', interview:'#854F0B', angebot:'#0F6E56', abgelehnt:'#A32D2D' };
-    Object.entries(jobStatuses).forEach(([id, st]) => {
-      if (!cols[st]) return;
-      const j = savedJobs[id] || allJobs.find(j => j.refnr === id) || { titel: id, arbeitgeber: '' };
-      cols[st].push(j);
-    });
-    document.getElementById('kanbanBoard').innerHTML = Object.entries(cols).map(([key, jobs]) =>
-      `<div class="kanban-col">
-        <div class="kanban-col-title" style="color:${colors[key]}">${labels[key]} (${jobs.length})</div>
-        ${jobs.length ? jobs.map(j => `<div class="kanban-card">
-          <div class="kanban-card-title">${j.titel||'—'}</div>
-          <div class="kanban-card-co">${j.arbeitgeber||''}</div>
-        </div>`).join('') : '<div style="font-size:12px;color:var(--text-secondary);padding:4px 0;">Leer</div>'}
-      </div>`).join('');
-  }
-
-  function toggleSave(id) {
-    const job = allJobs.find(j => j.refnr === id);
-    if (savedJobs[id]) delete savedJobs[id];
-    else savedJobs[id] = { titel: job?.titel||id, arbeitgeber: job?.arbeitgeber||'', refnr: id };
-    try { localStorage.setItem('ej_saved', JSON.stringify(savedJobs)); } catch(e) {}
-    updateStats(); renderJobs();
-    if (currentTab === 'saved') renderSaved();
-  }
-
-  function setStatus(id, val) {
-    if (val) jobStatuses[id] = val; else delete jobStatuses[id];
-    try { localStorage.setItem('ej_status', JSON.stringify(jobStatuses)); } catch(e) {}
-    updateStats();
-    if (currentTab === 'kanban') renderKanban();
-  }
-
-  function updateStats() {
-    const jobs = filteredJobs();
-    document.getElementById('statTotal').textContent   = jobs.length || (allJobs.length || '—');
-    document.getElementById('statNew').textContent     = allJobs.filter(j => j._new).length || '—';
-    document.getElementById('statSaved').textContent   = Object.keys(savedJobs).length;
-    document.getElementById('statApplied').textContent = Object.values(jobStatuses).filter(s => ['beworben','interview','angebot'].includes(s)).length;
-  }
+  // Spread Map values into an array, tag each job, then sort new jobs first
+  // (b._new ? 1 : 0) - (a._new ? 1 : 0)  →  1-0=1 means b before a when b is new
+  allJobs = [...results.values()].map(tagJob).sort((a, b) => (b._new ? 1 : 0) - (a._new ? 1 : 0));
 
   updateStats();
+  renderJobs();
+  btn.classList.remove('loading');
+}
+
+// ── setProgress(pct, show) ────────────────────────────────────────────────────
+// Controls the thin progress bar at the top.
+// `show` is optional: if provided, makes the bar visible or hides it.
+function setProgress(pct, show) {
+  const bar = document.getElementById('progressBar');
+  if (show !== undefined) bar.style.display = show ? 'block' : 'none';
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+// ── showError(msg) ────────────────────────────────────────────────────────────
+// Shows or hides the red error banner at the top.  Pass null to hide it.
+function showError(msg) {
+  const el = document.getElementById('error-bar');
+  el.textContent = msg || '';
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// ── setFilter(f, btn) ─────────────────────────────────────────────────────────
+// Called when a filter button is clicked.  Updates activeFilter and re-renders.
+function setFilter(f, btn) {
+  activeFilter = f;
+  // Remove 'active' from all filter buttons, then add it to the clicked one
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderJobs();
+}
+
+// ── switchTab(tab, btn) ───────────────────────────────────────────────────────
+// Shows the selected tab panel and hides the others.
+function switchTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Loop over tab IDs and set display to 'block' for the active one, 'none' for others
+  ['jobs','saved','kanban'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  // Render the tab content on demand (lazy evaluation — don't render until needed)
+  if (tab === 'saved')  renderSaved();
+  if (tab === 'kanban') renderKanban();
+}
+
+// ── filteredJobs() ────────────────────────────────────────────────────────────
+// Returns the subset of allJobs that match the active filter + search text.
+// Like a pandas boolean mask applied to the jobs array.
+function filteredJobs() {
+  const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  return allJobs.filter(j => {
+    // Build a searchable string from the job's key fields
+    const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort].join(' ').toLowerCase();
+    if (q && !txt.includes(q)) return false;  // text search: drop if no match
+    // Category filters: return only jobs with the matching boolean tag
+    if (activeFilter === 'wind')    return j._wind;
+    if (activeFilter === 'solar')   return j._solar;
+    if (activeFilter === 'remote')  return j._remote;
+    if (activeFilter === 'hamburg') return j._hh;
+    return true; // 'all' filter: keep everything
+  });
+}
+
+// ── jobCardHTML(j) ────────────────────────────────────────────────────────────
+// Builds the HTML string for a single job card.
+// Template literals (backtick strings) allow multi-line strings with ${} interpolation —
+// exactly like Python's f-strings.
+function jobCardHTML(j) {
+  const id    = j.refnr;
+  const saved  = !!savedJobs[id];   // !! coerces to boolean (like bool() in Python)
+  const status = jobStatuses[id] || '';
+  const loc    = j.arbeitsort?.ort || j.arbeitsort?.region || 'Deutschland';
+  const url    = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${id}`;
+
+  // Build the badge list dynamically based on the job's tags
+  const tags = [];
+  if (j._new)    tags.push('<span class="badge badge-new">Neu</span>');
+  if (j._wind)   tags.push('<span class="badge badge-wind">Wind</span>');
+  if (j._solar)  tags.push('<span class="badge badge-solar">Solar</span>');
+  if (j._remote) tags.push('<span class="badge badge-remote">Remote</span>');
+  if (j._date)   tags.push(`<span class="badge badge-date">${j._date}</span>`);
+
+  // Return the full card HTML as a string.
+  // The status <select> is only rendered if the job has been saved.
+  return `<div class="job-card ${j._new ? 'new-today' : ''}">
+    <div class="job-top">
+      <div style="flex:1;min-width:0;">
+        <div class="job-title"><a href="${url}" target="_blank">${j.titel}</a></div>
+        <div class="job-company">${j.arbeitgeber || 'Unbekannt'}</div>
+      </div>
+      <span class="source-tag">BA</span>
+    </div>
+    <div class="job-meta">
+      <span class="badge badge-location">📍 ${loc}</span>${tags.join('')}
+    </div>
+    <div class="job-actions">
+      <button class="action-btn ${saved ? 'saved' : ''}" onclick="toggleSave('${id}')">
+        ${saved ? '★ Gemerkt' : '☆ Merken'}
+      </button>
+      <a class="action-btn" href="${url}" target="_blank">Zur Stelle →</a>
+      <!-- Description toggle button — id lets JS find it to update its label -->
+      <button class="action-btn" id="desc-btn-${id}" onclick="toggleDescription('${id}')">
+        ▾ Beschreibung
+      </button>
+      ${saved ? `<select class="status-select" onchange="setStatus('${id}', this.value)">
+        <option value="" ${!status?'selected':''}>Status…</option>
+        <option value="beworben"  ${status==='beworben' ?'selected':''}>Beworben</option>
+        <option value="interview" ${status==='interview'?'selected':''}>Interview</option>
+        <option value="angebot"   ${status==='angebot'  ?'selected':''}>Angebot</option>
+        <option value="abgelehnt" ${status==='abgelehnt'?'selected':''}>Abgelehnt</option>
+      </select>` : ''}
+    </div>
+    <!-- Description panel — empty on first render, filled lazily on first toggle -->
+    <div class="job-description" id="desc-${id}"></div>
+  </div>`;
+}
+
+// ── renderJobs() ──────────────────────────────────────────────────────────────
+// Replaces the innerHTML of #jobsList with freshly-rendered job cards.
+// innerHTML is like overwriting a file: the whole content is replaced.
+function renderJobs() {
+  const jobs = filteredJobs();
+  updateStats();
+  document.getElementById('jobsList').innerHTML = jobs.length
+    ? jobs.map(jobCardHTML).join('')        // map each job → HTML string, then join
+    : '<div class="empty">Keine Stellen gefunden. Filter anpassen oder neu laden.</div>';
+}
+
+// ── renderSaved() ─────────────────────────────────────────────────────────────
+// Renders the "Gemerkte Jobs" (saved jobs) tab.
+// Falls back to stub data stored in savedJobs if the job is no longer in allJobs
+// (e.g., if the user saved it in a previous session).
+function renderSaved() {
+  const ids  = Object.keys(savedJobs);
+  const list = document.getElementById('savedList');
+  if (!ids.length) { list.innerHTML = '<div class="empty">Noch keine Jobs gemerkt.</div>'; return; }
+  // For each saved id, try to find the full job in allJobs; fall back to the stub
+  const jobs = ids.map(id => allJobs.find(j => j.refnr === id) || { refnr: id, ...savedJobs[id] });
+  list.innerHTML = jobs.map(jobCardHTML).join('');
+}
+
+// ── renderKanban() ────────────────────────────────────────────────────────────
+// Renders the Kanban board (application pipeline view).
+// Groups jobs by their status into 4 columns.
+function renderKanban() {
+  // Object acting as a grouped dict: status → list of jobs
+  const cols   = { beworben:[], interview:[], angebot:[], abgelehnt:[] };
+  const labels = { beworben:'Beworben', interview:'Interview', angebot:'Angebot', abgelehnt:'Abgelehnt' };
+  const colors = { beworben:'#185FA5', interview:'#854F0B', angebot:'#0F6E56', abgelehnt:'#A32D2D' };
+
+  // Group jobs with a status into the appropriate column
+  Object.entries(jobStatuses).forEach(([id, st]) => {
+    if (!cols[st]) return;
+    const j = savedJobs[id] || allJobs.find(j => j.refnr === id) || { titel: id, arbeitgeber: '' };
+    cols[st].push(j);
+  });
+
+  // Build the board HTML from each column
+  document.getElementById('kanbanBoard').innerHTML = Object.entries(cols).map(([key, jobs]) =>
+    `<div class="kanban-col">
+      <div class="kanban-col-title" style="color:${colors[key]}">${labels[key]} (${jobs.length})</div>
+      ${jobs.length
+        ? jobs.map(j => `<div class="kanban-card">
+            <div class="kanban-card-title">${j.titel||'—'}</div>
+            <div class="kanban-card-co">${j.arbeitgeber||''}</div>
+          </div>`).join('')
+        : '<div style="font-size:12px;color:var(--text-secondary);padding:4px 0;">Leer</div>'}
+    </div>`).join('');
+}
+
+// ── toggleDescription(id) ────────────────────────────────────────────────────
+// Shows or hides the description panel for a job card.
+// On first open: fetches from /api/detail and caches the result.
+// On subsequent toggles: uses the cache — no network request.
+async function toggleDescription(id) {
+  const panel = document.getElementById(`desc-${id}`);
+  const btn   = document.getElementById(`desc-btn-${id}`);
+  const isOpen = panel.classList.contains('open');
+
+  if (isOpen) {
+    // Close the panel
+    panel.classList.remove('open');
+    btn.textContent = '▾ Beschreibung';
+    return;
+  }
+
+  // Open the panel
+  panel.classList.add('open');
+  btn.textContent = '▴ Beschreibung';
+
+  // If already cached, just show it — no fetch needed
+  if (descriptionCache[id]) {
+    panel.innerHTML = descriptionCache[id];
+    return;
+  }
+
+  // First open: show a loading indicator while we fetch
+  panel.innerHTML = '<span class="desc-loading">Beschreibung wird geladen…</span>';
+
+  try {
+    const r = await fetch(`/api/detail?refnr=${encodeURIComponent(id)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+
+    // stellenangebotsBeschreibung may contain HTML — we render it directly.
+    // The CSS rules above (.job-description *) strip out the BA's inline styles.
+    const html = data.stellenangebotsBeschreibung || '<em>Keine Beschreibung verfügbar.</em>';
+    descriptionCache[id] = html;  // store in cache for future toggles
+    panel.innerHTML = html;
+
+  } catch (err) {
+    panel.innerHTML = `<span class="desc-error">Fehler beim Laden: ${err.message}</span>`;
+  }
+}
+
+// ── toggleSave(id) ────────────────────────────────────────────────────────────
+// Adds or removes a job from the savedJobs dict, then persists to localStorage.
+function toggleSave(id) {
+  const job = allJobs.find(j => j.refnr === id);
+  if (savedJobs[id]) delete savedJobs[id];   // already saved → unsave
+  else savedJobs[id] = { titel: job?.titel||id, arbeitgeber: job?.arbeitgeber||'', refnr: id };
+  try { localStorage.setItem('ej_saved', JSON.stringify(savedJobs)); } catch(e) {}
+  updateStats();
+  renderJobs();
+  if (currentTab === 'saved') renderSaved();
+}
+
+// ── setStatus(id, val) ────────────────────────────────────────────────────────
+// Updates the application status for a job and persists it to localStorage.
+function setStatus(id, val) {
+  if (val) jobStatuses[id] = val; else delete jobStatuses[id];
+  try { localStorage.setItem('ej_status', JSON.stringify(jobStatuses)); } catch(e) {}
+  updateStats();
+  if (currentTab === 'kanban') renderKanban();
+}
+
+// ── updateStats() ─────────────────────────────────────────────────────────────
+// Updates the four stat counters at the top of the page by writing to the DOM.
+// textContent sets the visible text of an element (no HTML tags, just plain text).
+function updateStats() {
+  const jobs = filteredJobs();
+  document.getElementById('statTotal').textContent   = jobs.length || (allJobs.length || '—');
+  document.getElementById('statNew').textContent     = allJobs.filter(j => j._new).length || '—';
+  document.getElementById('statSaved').textContent   = Object.keys(savedJobs).length;
+  document.getElementById('statApplied').textContent = Object.values(jobStatuses)
+    .filter(s => ['beworben','interview','angebot'].includes(s)).length;
+}
+
+// ── INITIALISATION ────────────────────────────────────────────────────────────
+// This runs immediately when the page loads (equivalent to `if __name__ == "__main__"`).
+// Only stats are updated; jobs are loaded lazily when the user clicks Aktualisieren.
+updateStats();
 </script>
 </body>
 </html>
