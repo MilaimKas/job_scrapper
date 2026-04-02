@@ -9,7 +9,7 @@ export default async (req, context) => {
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'X-API-Key': 'jobboerse-app-v1',
+        'X-API-Key': 'jobboerse-jobsuche',
         'User-Agent': 'Jobsuche/2.9.2 (de.arbeitsagentur.jobboerse; build:1077; iOS 15.1.0) Alamofire/5.4.4',
         'Accept': 'application/json',
         'Accept-Language': 'de-DE,de;q=0.9',
