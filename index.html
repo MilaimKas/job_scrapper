@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jobsuche — Erneuerbare Energien</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-primary: #ffffff; --bg-secondary: #f4f4f2; --bg-tertiary: #eceae3;
+      --text-primary: #1a1a18; --text-secondary: #6b6b67;
+      --border-light: rgba(0,0,0,0.1); --border-mid: rgba(0,0,0,0.18);
+      --green: #1D9E75; --green-light: #E1F5EE; --green-dark: #0F6E56;
+      --radius-md: 8px; --radius-lg: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #1e1e1c; --bg-secondary: #2a2a28; --bg-tertiary: #333331;
+        --text-primary: #f0ede6; --text-secondary: #9a9994;
+        --border-light: rgba(255,255,255,0.1); --border-mid: rgba(255,255,255,0.18);
+        --green-light: #0a3d2b; --green-dark: #5DCAA5;
+      }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg-tertiary); color: var(--text-primary); min-height: 100vh; padding: 2rem 1rem; }
+    .app { max-width: 860px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; }
+    .header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+    .error-bar { background: #FCEBEB; border: 0.5px solid #F09595; border-radius: var(--radius-md); padding: 12px 16px; font-size: 13px; color: #791F1F; margin-bottom: 1rem; display: none; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; align-items: center; }
+    .filter-btn { font-size: 12px; padding: 5px 14px; border-radius: 20px; border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+    .filter-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+    .filter-btn:hover:not(.active) { background: var(--bg-secondary); }
+    .refresh-btn { margin-left: auto; font-size: 13px; padding: 7px 18px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+    .refresh-btn:hover { background: var(--bg-secondary); }
+    .refresh-btn:active { transform: scale(0.97); }
+    .refresh-btn.loading .spin { display: inline-block; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .search-input { width: 100%; font-size: 13px; padding: 8px 14px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-primary); margin-bottom: 12px; outline: none; }
+    .search-input:focus { border-color: var(--green); }
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+    .stat { background: var(--bg-primary); border-radius: var(--radius-md); padding: 12px 14px; border: 0.5px solid var(--border-light); }
+    .stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+    .stat-val { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+    .tabs { display: flex; gap: 2px; margin-bottom: 1rem; border-bottom: 0.5px solid var(--border-light); }
+    .tab { font-size: 13px; padding: 7px 16px; border: none; background: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+    .tab.active { color: var(--green); border-bottom-color: var(--green); font-weight: 500; }
+    .jobs-list { display: flex; flex-direction: column; gap: 10px; }
+    .job-card { background: var(--bg-primary); border: 0.5px solid var(--border-light); border-radius: var(--radius-lg); padding: 14px 16px; transition: border-color 0.15s; }
+    .job-card:hover { border-color: var(--border-mid); }
+    .job-card.new-today { border-left: 3px solid var(--green); }
+    .job-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .job-title { font-size: 14px; font-weight: 500; color: var(--text-primary); line-height: 1.4; }
+    .job-title a { color: inherit; text-decoration: none; }
+    .job-title a:hover { color: var(--green); }
+    .job-company { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+    .source-tag { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+    .job-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+    .badge-location { background: var(--bg-secondary); color: var(--text-secondary); }
+    .badge-wind { background: #E1F5EE; color: #0F6E56; }
+    .badge-solar { background: #FAEEDA; color: #854F0B; }
+    .badge-remote { background: #EEEDFE; color: #534AB7; }
+    .badge-new { background: #EAF3DE; color: #3B6D11; font-weight: 600; }
+    .badge-date { background: var(--bg-secondary); color: var(--text-secondary); }
+    @media (prefers-color-scheme: dark) {
+      .badge-wind { background: #083d2b; color: #5DCAA5; }
+      .badge-solar { background: #3d2a08; color: #EF9F27; }
+      .badge-remote { background: #1e1a40; color: #AFA9EC; }
+      .badge-new { background: #0f2a08; color: #97C459; }
+    }
+    .job-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border-light); align-items: center; flex-wrap: wrap; }
+    .action-btn { font-size: 12px; padding: 5px 12px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; }
+    .action-btn:hover { background: var(--bg-secondary); }
+    .action-btn.saved { color: var(--green); border-color: var(--green); }
+    .status-select { font-size: 12px; padding: 5px 8px; border-radius: var(--radius-md); border: 0.5px solid var(--border-mid); background: var(--bg-primary); color: var(--text-secondary); cursor: pointer; margin-left: auto; }
+    .empty { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 14px; background: var(--bg-primary); border-radius: var(--radius-lg); border: 0.5px solid var(--border-light); }
+    .kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 600px) { .kanban { grid-template-columns: repeat(2, 1fr); } .stats-row { grid-template-columns: repeat(2, 1fr); } .refresh-btn { margin-left: 0; width: 100%; justify-content: center; } }
+    .kanban-col { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 10px; }
+    .kanban-col-title { font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kanban-card { background: var(--bg-primary); border: 0.5px solid var(--border-light); border-radius: var(--radius-md); padding: 10px; margin-bottom: 8px; }
+    .kanban-card-title { font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+    .kanban-card-co { font-size: 11px; color: var(--text-secondary); }
+    .progress-bar { height: 3px; background: var(--bg-secondary); border-radius: 2px; margin-bottom: 1rem; overflow: hidden; display: none; }
+    .progress-fill { height: 100%; background: var(--green); width: 0%; transition: width 0.3s ease; border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Jobsuche — Erneuerbare Energien</h1>
+    <p>Projektmanagement · Wind &amp; Solar · Deutschland</p>
+  </div>
+  <div id="error-bar" class="error-bar"></div>
+  <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="controls">
+    <button class="filter-btn active" onclick="setFilter('all', this)">Alle</button>
+    <button class="filter-btn" onclick="setFilter('wind', this)">Wind</button>
+    <button class="filter-btn" onclick="setFilter('solar', this)">Solar / PV</button>
+    <button class="filter-btn" onclick="setFilter('remote', this)">Remote</button>
+    <button class="filter-btn" onclick="setFilter('hamburg', this)">Hamburg</button>
+    <button class="refresh-btn" id="refreshBtn" onclick="fetchJobs()">
+      <span class="spin">⟳</span> Aktualisieren
+    </button>
+  </div>
+  <input class="search-input" id="searchInput" placeholder="Stichwortsuche (z.B. Windpark, Bauleitung, Offshore...)" oninput="renderJobs()" />
+  <div class="stats-row">
+    <div class="stat"><div class="stat-label">Gefunden</div><div class="stat-val" id="statTotal">—</div></div>
+    <div class="stat"><div class="stat-label">Neu heute</div><div class="stat-val" id="statNew">—</div></div>
+    <div class="stat"><div class="stat-label">Gemerkt</div><div class="stat-val" id="statSaved">—</div></div>
+    <div class="stat"><div class="stat-label">Beworben</div><div class="stat-val" id="statApplied">—</div></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('jobs', this)">Stellenangebote</button>
+    <button class="tab" onclick="switchTab('saved', this)">Gemerkte Jobs</button>
+    <button class="tab" onclick="switchTab('kanban', this)">Bewerbungen</button>
+  </div>
+  <div id="tab-jobs"><div class="jobs-list" id="jobsList"><div class="empty">Klicke auf "Aktualisieren" um aktuelle Stellen zu laden.</div></div></div>
+  <div id="tab-saved" style="display:none;"><div class="jobs-list" id="savedList"></div></div>
+  <div id="tab-kanban" style="display:none;"><div class="kanban" id="kanbanBoard"></div></div>
+</div>
+<script>
+  let allJobs = [], activeFilter = 'all', currentTab = 'jobs';
+  let savedJobs = {}, jobStatuses = {};
+  try { savedJobs = JSON.parse(localStorage.getItem('ej_saved') || '{}'); } catch(e) {}
+  try { jobStatuses = JSON.parse(localStorage.getItem('ej_status') || '{}'); } catch(e) {}
+
+  const KW_WIND   = ['wind','offshore','onshore','windpark','windkraft','windenergie','windturbine','rotor'];
+  const KW_SOLAR  = ['solar','photovoltaik','pv','solarpark','solarkraft','solaranlage'];
+  const KW_REMOTE = ['remote','homeoffice','home office','mobiles arbeiten','ortsunabhängig','bundesweit'];
+  const KW_HH     = ['hamburg','schleswig','mecklenburg','niedersachsen','lübeck','kiel','rostock','bremen','schwerin','flensburg'];
+
+  const QUERIES = [
+    { was: 'Projektmanager Windenergie',        wo: 'Hamburg', umkreis: 200 },
+    { was: 'Projektmanager Erneuerbare Energien', wo: 'Hamburg', umkreis: 200 },
+    { was: 'Projektleiter Windkraft',            wo: 'Deutschland' },
+    { was: 'Projektleiter Photovoltaik',         wo: 'Deutschland' },
+    { was: 'Projektmanager Solar',               wo: 'Deutschland' },
+    { was: 'Projektleiter Erneuerbare Energien', wo: 'Deutschland' },
+    { was: 'Projektmanager Offshore Wind',       wo: 'Deutschland' },
+    { was: 'Bauleiter Windpark',                 wo: 'Deutschland' },
+  ];
+
+  function tagJob(j) {
+    const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort, j.arbeitsort?.region, j.arbeitsort?.bundesland].join(' ').toLowerCase();
+    j._wind   = KW_WIND.some(k => txt.includes(k));
+    j._solar  = KW_SOLAR.some(k => txt.includes(k));
+    j._remote = KW_REMOTE.some(k => txt.includes(k));
+    j._hh     = KW_HH.some(k => txt.includes(k));
+    const pub = j.aktuelleVeroeffentlichungsdatum || j.eintrittsdatum || '';
+    const d = new Date(pub); const today = new Date(); today.setHours(0,0,0,0);
+    j._new  = !isNaN(d.getTime()) && d >= today;
+    j._date = pub ? new Date(pub).toLocaleDateString('de-DE') : '';
+    return j;
+  }
+
+  async function fetchJobs() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('loading');
+    showError(null);
+    setProgress(0, true);
+    const results = new Map();
+    let fetchedAny = false;
+
+    for (let i = 0; i < QUERIES.length; i++) {
+      const q = QUERIES[i];
+      const params = new URLSearchParams({ was: q.was, size: 25, angebotsart: 1 });
+      if (q.wo) params.set('wo', q.wo);
+      if (q.umkreis) params.set('umkreis', q.umkreis);
+      try {
+        // Call our Netlify proxy instead of the BA API directly
+        const r = await fetch(`/api/jobs?${params}`);
+        if (r.ok) {
+          const data = await r.json();
+          fetchedAny = true;
+          (data.stellenangebote || []).forEach(j => { if (!results.has(j.refnr)) results.set(j.refnr, j); });
+        }
+      } catch(e) {}
+      setProgress(Math.round(((i + 1) / QUERIES.length) * 100));
+    }
+
+    setProgress(100);
+    setTimeout(() => setProgress(0, false), 600);
+
+    if (!fetchedAny) {
+      showError('Die API ist nicht erreichbar. Bitte prüfe deine Internetverbindung.');
+      btn.classList.remove('loading');
+      return;
+    }
+
+    allJobs = [...results.values()].map(tagJob).sort((a, b) => (b._new ? 1 : 0) - (a._new ? 1 : 0));
+    updateStats();
+    renderJobs();
+    btn.classList.remove('loading');
+  }
+
+  function setProgress(pct, show) {
+    const bar = document.getElementById('progressBar');
+    if (show !== undefined) bar.style.display = show ? 'block' : 'none';
+    document.getElementById('progressFill').style.width = pct + '%';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-bar');
+    el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none';
+  }
+
+  function setFilter(f, btn) {
+    activeFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); renderJobs();
+  }
+
+  function switchTab(tab, btn) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['jobs','saved','kanban'].forEach(t => { document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none'; });
+    if (tab === 'saved') renderSaved();
+    if (tab === 'kanban') renderKanban();
+  }
+
+  function filteredJobs() {
+    const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    return allJobs.filter(j => {
+      const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort].join(' ').toLowerCase();
+      if (q && !txt.includes(q)) return false;
+      if (activeFilter === 'wind')    return j._wind;
+      if (activeFilter === 'solar')   return j._solar;
+      if (activeFilter === 'remote')  return j._remote;
+      if (activeFilter === 'hamburg') return j._hh;
+      return true;
+    });
+  }
+
+  function jobCardHTML(j) {
+    const id = j.refnr;
+    const saved = !!savedJobs[id];
+    const status = jobStatuses[id] || '';
+    const loc = j.arbeitsort?.ort || j.arbeitsort?.region || 'Deutschland';
+    const url = `https://www.arbeitsagentur.de/jobsuche/jobdetail/${id}`;
+    const tags = [];
+    if (j._new)    tags.push('<span class="badge badge-new">Neu</span>');
+    if (j._wind)   tags.push('<span class="badge badge-wind">Wind</span>');
+    if (j._solar)  tags.push('<span class="badge badge-solar">Solar</span>');
+    if (j._remote) tags.push('<span class="badge badge-remote">Remote</span>');
+    if (j._date)   tags.push(`<span class="badge badge-date">${j._date}</span>`);
+    return `<div class="job-card ${j._new ? 'new-today' : ''}">
+      <div class="job-top">
+        <div style="flex:1;min-width:0;">
+          <div class="job-title"><a href="${url}" target="_blank">${j.titel}</a></div>
+          <div class="job-company">${j.arbeitgeber || 'Unbekannt'}</div>
+        </div>
+        <span class="source-tag">BA</span>
+      </div>
+      <div class="job-meta">
+        <span class="badge badge-location">📍 ${loc}</span>${tags.join('')}
+      </div>
+      <div class="job-actions">
+        <button class="action-btn ${saved ? 'saved' : ''}" onclick="toggleSave('${id}')">
+          ${saved ? '★ Gemerkt' : '☆ Merken'}
+        </button>
+        <a class="action-btn" href="${url}" target="_blank">Zur Stelle →</a>
+        ${saved ? `<select class="status-select" onchange="setStatus('${id}', this.value)">
+          <option value="" ${!status?'selected':''}>Status…</option>
+          <option value="beworben"  ${status==='beworben' ?'selected':''}>Beworben</option>
+          <option value="interview" ${status==='interview'?'selected':''}>Interview</option>
+          <option value="angebot"   ${status==='angebot'  ?'selected':''}>Angebot</option>
+          <option value="abgelehnt" ${status==='abgelehnt'?'selected':''}>Abgelehnt</option>
+        </select>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function renderJobs() {
+    const jobs = filteredJobs(); updateStats();
+    document.getElementById('jobsList').innerHTML = jobs.length
+      ? jobs.map(jobCardHTML).join('')
+      : '<div class="empty">Keine Stellen gefunden. Filter anpassen oder neu laden.</div>';
+  }
+
+  function renderSaved() {
+    const ids = Object.keys(savedJobs);
+    const list = document.getElementById('savedList');
+    if (!ids.length) { list.innerHTML = '<div class="empty">Noch keine Jobs gemerkt.</div>'; return; }
+    const jobs = ids.map(id => allJobs.find(j => j.refnr === id) || { refnr: id, ...savedJobs[id] });
+    list.innerHTML = jobs.map(jobCardHTML).join('');
+  }
+
+  function renderKanban() {
+    const cols = { beworben:[], interview:[], angebot:[], abgelehnt:[] };
+    const labels = { beworben:'Beworben', interview:'Interview', angebot:'Angebot', abgelehnt:'Abgelehnt' };
+    const colors = { beworben:'#185FA5', interview:'#854F0B', angebot:'#0F6E56', abgelehnt:'#A32D2D' };
+    Object.entries(jobStatuses).forEach(([id, st]) => {
+      if (!cols[st]) return;
+      const j = savedJobs[id] || allJobs.find(j => j.refnr === id) || { titel: id, arbeitgeber: '' };
+      cols[st].push(j);
+    });
+    document.getElementById('kanbanBoard').innerHTML = Object.entries(cols).map(([key, jobs]) =>
+      `<div class="kanban-col">
+        <div class="kanban-col-title" style="color:${colors[key]}">${labels[key]} (${jobs.length})</div>
+        ${jobs.length ? jobs.map(j => `<div class="kanban-card">
+          <div class="kanban-card-title">${j.titel||'—'}</div>
+          <div class="kanban-card-co">${j.arbeitgeber||''}</div>
+        </div>`).join('') : '<div style="font-size:12px;color:var(--text-secondary);padding:4px 0;">Leer</div>'}
+      </div>`).join('');
+  }
+
+  function toggleSave(id) {
+    const job = allJobs.find(j => j.refnr === id);
+    if (savedJobs[id]) delete savedJobs[id];
+    else savedJobs[id] = { titel: job?.titel||id, arbeitgeber: job?.arbeitgeber||'', refnr: id };
+    try { localStorage.setItem('ej_saved', JSON.stringify(savedJobs)); } catch(e) {}
+    updateStats(); renderJobs();
+    if (currentTab === 'saved') renderSaved();
+  }
+
+  function setStatus(id, val) {
+    if (val) jobStatuses[id] = val; else delete jobStatuses[id];
+    try { localStorage.setItem('ej_status', JSON.stringify(jobStatuses)); } catch(e) {}
+    updateStats();
+    if (currentTab === 'kanban') renderKanban();
+  }
+
+  function updateStats() {
+    const jobs = filteredJobs();
+    document.getElementById('statTotal').textContent   = jobs.length || (allJobs.length || '—');
+    document.getElementById('statNew').textContent     = allJobs.filter(j => j._new).length || '—';
+    document.getElementById('statSaved').textContent   = Object.keys(savedJobs).length;
+    document.getElementById('statApplied').textContent = Object.values(jobStatuses).filter(s => ['beworben','interview','angebot'].includes(s)).length;
+  }
+
+  updateStats();
+</script>
+</body>
+</html>
