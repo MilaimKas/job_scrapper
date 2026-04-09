@@ -322,8 +322,11 @@ Functions are declared with `function name(){}` or arrow syntax `() => {}`.
 // ── GLOBAL STATE ─────────────────────────────────────────────────────────────
 // Think of these as module-level variables in Python.
 let allJobs = [];          // Array (like a Python list) of all fetched job objects
-let activeFilter = 'all';  // Which filter button is currently active
 let currentTab = 'jobs';   // Which tab panel is visible
+
+// Set of active filters — like a Python set().
+// Empty set means "Alle" (no filtering). Multiple entries = AND logic.
+let activeFilters = new Set();
 
 // Cache for fetched descriptions: { refnr: htmlString }
 // Avoids re-fetching when the user toggles the panel closed then open again.
@@ -462,12 +465,31 @@ function showError(msg) {
 }
 
 // ── setFilter(f, btn) ─────────────────────────────────────────────────────────
-// Called when a filter button is clicked.  Updates activeFilter and re-renders.
+// Toggles a filter in/out of the activeFilters Set, then re-renders.
+// "Alle" clears all others; selecting any specific filter deselects "Alle".
 function setFilter(f, btn) {
-  activeFilter = f;
-  // Remove 'active' from all filter buttons, then add it to the clicked one
+  if (f === 'all') {
+    // "Alle" resets everything — like set.clear() in Python
+    activeFilters.clear();
+  } else {
+    // Toggle: add if absent, delete if already present (like a checkbox)
+    if (activeFilters.has(f)) activeFilters.delete(f);
+    else activeFilters.add(f);
+  }
+
+  // Sync button visual state with the Set
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (activeFilters.size === 0) {
+    // Nothing selected → highlight "Alle"
+    document.querySelector('.filter-btn').classList.add('active');
+  } else {
+    // Highlight every button whose filter is in the active set
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      if (activeFilters.has(b.getAttribute('onclick').match(/'(\w+)'/)?.[1])) {
+        b.classList.add('active');
+      }
+    });
+  }
   renderJobs();
 }
 
@@ -487,20 +509,21 @@ function switchTab(tab, btn) {
 }
 
 // ── filteredJobs() ────────────────────────────────────────────────────────────
-// Returns the subset of allJobs that match the active filter + search text.
-// Like a pandas boolean mask applied to the jobs array.
+// Returns jobs matching the active filter Set (AND logic) + search text.
+// AND logic: a job must satisfy ALL active filters to pass — like chaining
+// multiple boolean masks in pandas: df[mask_a & mask_b].
 function filteredJobs() {
   const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  // Map each filter key to the corresponding boolean tag on the job object
+  const filterMap = { wind: '_wind', solar: '_solar', remote: '_remote', hamburg: '_hh' };
   return allJobs.filter(j => {
-    // Build a searchable string from the job's key fields
     const txt = [j.titel, j.arbeitgeber, j.arbeitsort?.ort].join(' ').toLowerCase();
-    if (q && !txt.includes(q)) return false;  // text search: drop if no match
-    // Category filters: return only jobs with the matching boolean tag
-    if (activeFilter === 'wind')    return j._wind;
-    if (activeFilter === 'solar')   return j._solar;
-    if (activeFilter === 'remote')  return j._remote;
-    if (activeFilter === 'hamburg') return j._hh;
-    return true; // 'all' filter: keep everything
+    if (q && !txt.includes(q)) return false;
+    // Every filter in the active set must be true on this job (AND)
+    for (const f of activeFilters) {
+      if (!j[filterMap[f]]) return false;
+    }
+    return true; // passes all active filters (or none are active)
   });
 }
 

@@ -51,10 +51,12 @@ ${description}
 ## Task
 Return ONLY a valid JSON object with exactly these two fields:
 - "score": an integer from 0 to 100 representing the match quality
-- "reasoning": exactly ${MATCH_CONFIG.reasoning_sentences} sentences in ${MATCH_CONFIG.language} explaining the main strengths and weaknesses of the match
+- "reasoning": exactly ${MATCH_CONFIG.reasoning_sentences} sentences in ${MATCH_CONFIG.language} explaining the main strengths and weaknesses of the match. 
+Written in the second person addressing the candidate directly.
 
 Example output format (do not copy the content, only the structure):
-{"score": 72, "reasoning": "Die Kandidatin bringt solide Erfahrung in der Projektleitung mit. Kenntnisse im Bereich Offshore-Wind fehlen jedoch. Die geforderte PMP-Zertifizierung ist nicht vorhanden."}
+{"score": 72, "reasoning": "Du bringst solide Erfahrung in der Projektleitung mit. Kenntnisse im Bereich Offshore-Wind fehlen jedoch. 
+Die geforderte PMP-Zertifizierung ist nicht vorhanden."}
 
 JSON output:`;
 }
